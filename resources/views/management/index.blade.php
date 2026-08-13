@@ -1,0 +1,5 @@
+@extends('layouts.app')
+@section('content')
+<section class="card"><div style="display:flex;justify-content:space-between;align-items:center"><h1>{{ $config['title'] }}</h1><a class="button" href="{{ route('management.create',$resource) }}">ثبت جدید</a></div>
+<table><thead><tr><th>شناسه</th><th>عنوان</th><th>وضعیت</th><th>عملیات</th></tr></thead><tbody>@forelse($records as $record)<tr><td>{{ $record->id }}</td><td>{{ $record->full_name ?? $record->name ?? $record->title ?? '—' }}</td><td>{{ $record->status ?? (isset($record->is_active) && ! $record->is_active ? 'غیرفعال' : 'فعال') }}</td><td><a href="{{ route('management.edit',[$resource,$record->id]) }}">ویرایش</a>@if($resource==='projects') | <a href="{{ route('customer.preview',$record) }}">پنل/مجوز مشتری</a>@endif @role('admin') <form method="post" action="{{ route('management.destroy',[$resource,$record->id]) }}" style="display:inline">@csrf @method('DELETE')<button onclick="return confirm('حذف شود؟')">حذف</button></form>@endrole</td></tr>@empty<tr><td colspan="4">رکوردی وجود ندارد.</td></tr>@endforelse</tbody></table>{{ $records->links() }}</section>
+@endsection

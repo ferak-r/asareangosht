@@ -1,0 +1,6 @@
+@extends('layouts.app')
+@section('content')
+<section class="card"><div style="display:flex;justify-content:space-between"><h1>اسناد مالی</h1><a class="button" href="{{ route('financial.create') }}">سند جدید</a></div>
+<form method="get" style="display:grid;grid-template-columns:1fr 1fr auto;gap:10px"><select name="type"><option value="">همه انواع</option>@foreach(['expense'=>'هزینه','income'=>'درآمد','payroll_payment'=>'حقوق','receivable'=>'طلب','payable'=>'بدهی','account_transfer'=>'انتقال'] as $k=>$v)<option value="{{ $k }}" @selected(request('type')===$k)>{{ $v }}</option>@endforeach</select><select name="project_id"><option value="">همه پروژه‌ها</option>@foreach($projects as $id=>$title)<option value="{{ $id }}" @selected(request('project_id')==$id)>{{ $title }}</option>@endforeach</select><button>فیلتر</button></form>
+<table><thead><tr><th>شماره</th><th>عنوان</th><th>نوع</th><th>مبلغ خالص</th><th>وضعیت</th><th></th></tr></thead><tbody>@forelse($documents as $d)<tr><td>{{ $d->document_no }}</td><td>{{ $d->title }}</td><td>{{ $d->type }}</td><td>{{ number_format($d->net_amount) }} تومان</td><td>{{ $d->status }}</td><td><a href="{{ route('financial.show',$d) }}">جزئیات</a></td></tr>@empty<tr><td colspan="6">سندی ثبت نشده است.</td></tr>@endforelse</tbody></table>{{ $documents->links() }}</section>
+@endsection
