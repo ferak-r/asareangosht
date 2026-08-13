@@ -76,8 +76,11 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
-    const filterOptions = (select, selector, visibleValue) => {
-        [...select.options].forEach(option => { if (!option.value) return; option.hidden = option.dataset[selector] !== visibleValue; });
+    const filterOptions = (select, selector, visibleValue, projectId = null) => {
+        [...select.options].forEach(option => {
+            if (!option.value) return;
+            option.hidden = option.dataset[selector] !== visibleValue || (projectId && option.dataset.project !== projectId);
+        });
         if (select.selectedOptions[0]?.hidden) select.value = '';
     };
     const projectSelect = document.querySelector('[data-project-select]');
@@ -86,6 +89,8 @@ document.addEventListener('DOMContentLoaded', () => {
     if (projectSelect && contractSelect) filterOptions(contractSelect, 'project', projectSelect.value);
     const allocationType = document.querySelector('[data-allocation-type]');
     const allocationTarget = document.querySelector('[data-allocation-target]');
-    allocationType?.addEventListener('change', () => filterOptions(allocationTarget, 'type', allocationType.value));
-    if (allocationType && allocationTarget) filterOptions(allocationTarget, 'type', allocationType.value);
+    const filterAllocationTargets = () => filterOptions(allocationTarget, 'type', allocationType.value, projectSelect?.value || null);
+    allocationType?.addEventListener('change', filterAllocationTargets);
+    projectSelect?.addEventListener('change', filterAllocationTargets);
+    if (allocationType && allocationTarget) filterAllocationTargets();
 });
