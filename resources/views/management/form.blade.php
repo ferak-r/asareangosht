@@ -15,6 +15,11 @@ $foreign=['manager_person_id'=>'people','owner_person_id'=>'people','customer_pe
 @elseif(isset($foreign[$field]))<select name="{{ $field }}"><option value="">— انتخاب کنید —</option>@foreach($options[$foreign[$field]] as $id=>$title)<option value="{{ $id }}" @selected((string)$value===(string)$id)>{{ $title }}</option>@endforeach</select>
 @elseif(isset($selects[$field]))<select name="{{ $field }}">@foreach($selects[$field] as $key=>$title)<option value="{{ $key }}" @selected($value===$key)>{{ $title }}</option>@endforeach</select>
 @elseif(in_array($field,['address','notes','description','return_reason']))<textarea name="{{ $field }}" rows="3" style="width:100%">{{ $value }}</textarea>
-@else @php($isDate=in_array($field,['planned_start_date','planned_end_date','opening_balance_date','due_date','signed_date','start_date','end_date']); $type=$isDate?'text':(in_array($field,['budget_amount','contract_total_amount','opening_balance','progress_percent','sort_order','estimated_days','amount'])?'number':'text'))<input type="{{ $type }}" name="{{ $field }}" value="{{ $value }}" class="{{ $isDate ? 'jalali-date' : '' }}" placeholder="{{ $isDate ? '۱۴۰۵/۰۵/۲۲' : '' }}" {{ in_array($field,['full_name','name','code','title','mobile','kind','status','priority','project_id','project_item_id','project_subitem_id','budget_amount','contract_total_amount','opening_balance','progress_percent','sort_order','amount'])?'required':'' }}>
+@else
+@php
+    $isDate = in_array($field, ['planned_start_date','planned_end_date','opening_balance_date','due_date','signed_date','start_date','end_date']);
+    $type = $isDate ? 'text' : (in_array($field, ['budget_amount','contract_total_amount','opening_balance','progress_percent','sort_order','estimated_days','amount']) ? 'number' : 'text');
+@endphp
+<input type="{{ $type }}" name="{{ $field }}" value="{{ $value }}" class="{{ $isDate ? 'jalali-date' : '' }}" placeholder="{{ $isDate ? '۱۴۰۵/۰۵/۲۲' : '' }}" {{ in_array($field,['full_name','name','code','title','mobile','kind','status','priority','project_id','project_item_id','project_subitem_id','budget_amount','contract_total_amount','opening_balance','progress_percent','sort_order','amount'])?'required':'' }}>
 @endif @error($field)<div class="error">{{ $message }}</div>@enderror @endforeach<button type="submit">ذخیره</button></form></section>
 @endsection
