@@ -15,15 +15,15 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class CustomerPortalController extends Controller
 {
-    private const REPORTS = ['progress','financial_summary'];
+    private const REPORTS = ['progress','project_status','tasks_summary','contract_summary','income_summary','expense_summary','attachments'];
 
     public function index(Request $request): View { return view('customer.index',['projects'=>Project::where('customer_person_id',$request->user()->person_id)->get()]); }
 
     public function show(Request $request,Project $project): View
     {
         $this->memberCanAccess($request,$project); $enabled=$project->reportPermissions()->where('is_enabled',true)->pluck('report_key');
-        $financial=$enabled->contains('financial_summary') ? FinancialDocument::where('project_id',$project->id)->where('status','!=','voided')->selectRaw('type, SUM(net_amount) total')->groupBy('type')->pluck('total','type') : collect();
-        return view('customer.show',['project'=>$project->load(['items.subitems.tasks','comments.author','attachments']),'enabled'=>$enabled,'financial'=>$financial]);
+        $financial=($enabled->contains('income_summary') || $enabled->contains('expense_summary')) ? FinancialDocument::where('project_id',$project->id)->where('status','!=','voided')->selectRaw('type, SUM(net_amount) total')->groupBy('type')->pluck('total','type') : collect();
+        return view('customer.show',['project'=>$project->load(['contracts','items.subitems.tasks','comments.author','attachments']),'enabled'=>$enabled,'financial'=>$financial]);
     }
 
     public function permission(Request $request,Project $project): RedirectResponse

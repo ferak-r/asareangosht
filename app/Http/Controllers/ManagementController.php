@@ -16,12 +16,13 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
 
 class ManagementController extends Controller
 {
     private const RESOURCES = [
-        'people' => ['model'=>Person::class,'title'=>'اشخاص','roles'=>['admin','department_manager'],'fields'=>['type','full_name','mobile','national_id','registration_no','address','notes','is_active']],
+        'people' => ['model'=>Person::class,'title'=>'اشخاص','roles'=>['admin','department_manager'],'fields'=>['type','full_name','mobile','national_id','registration_no','business_roles','department_ids','address','notes','is_active']],
         'departments' => ['model'=>Department::class,'title'=>'دپارتمان‌ها','roles'=>['admin'],'fields'=>['name','code','description','manager_person_id','is_active']],
         'accounts' => ['model'=>FinancialAccount::class,'title'=>'حساب‌ها','roles'=>['admin'],'fields'=>['owner_person_id','name','kind','bank_name','branch_name','account_number','card_number','iban','opening_balance','opening_balance_date','is_workshop_owned','is_active','notes']],
         'projects' => ['model'=>Project::class,'title'=>'پروژه‌ها','roles'=>['admin','project_manager','department_manager'],'fields'=>['code','title','customer_person_id','department_ids','manager_ids','planned_start_date','planned_end_date','budget_amount','contract_total_amount','status','site_address','site_phone','description','is_active']],
@@ -53,9 +54,11 @@ class ManagementController extends Controller
         $data = $request->validate($this->rules($resource));
         $this->enforceScope($request, $resource, $data);
         if (in_array($resource, ['projects', 'contracts'], true)) $data['created_by'] = $request->user()->id;
-        $relations = Arr::only($data, ['department_ids', 'manager_ids', 'assignee_ids']);
-        $record = ($config['model'])::create(Arr::except($data, array_keys($relations)));
-        $this->syncRelations($resource, $record, $relations, $request);
+        $relations = Arr::only($data, ['business_roles', 'department_ids', 'manager_ids', 'assignee_ids']);
+        DB::transaction(function () use ($config, $data, $relations, $resource, $request) {
+            $record = ($config['model'])::create(Arr::except($data, array_keys($relations)));
+            $this->syncRelations($resource, $record, $relations, $request);
+        });
         return redirect()->route('management.index',$resource)->with('success', 'رکورد جدید ثبت شد.');
     }
 
@@ -69,7 +72,8 @@ class ManagementController extends Controller
     public function update(Request $request, string $resource, int $id): RedirectResponse
     {
         $config = $this->config($resource); $this->guard($request, $config); $record = ($config['model'])::findOrFail($id);
-        $this->authorizeRecord($request, $resource, $record); $data = $request->validate($this->rules($resource, $record)); $this->enforceScope($request, $resource, $data); if($resource==='tasks'&&$record->status==='completed'&&($data['status']??null)==='in_progress'&&!$request->user()->hasAnyRole(['admin','project_manager']))abort(403); $relations=Arr::only($data,['department_ids','manager_ids','assignee_ids']); $record->update(Arr::except($data,array_keys($relations))); $this->syncRelations($resource,$record,$relations,$request);
+        $this->authorizeRecord($request, $resource, $record); $data = $request->validate($this->rules($resource, $record)); $this->enforceScope($request, $resource, $data); if($resource==='tasks'&&$record->status==='completed'&&($data['status']??null)==='in_progress'&&!$request->user()->hasAnyRole(['admin','project_manager']))abort(403); $relations=Arr::only($data,['business_roles','department_ids','manager_ids','assignee_ids']);
+        DB::transaction(function () use ($record, $data, $relations, $resource, $request) { $record->update(Arr::except($data,array_keys($relations))); $this->syncRelations($resource,$record,$relations,$request); });
         return redirect()->route('management.index',$resource)->with('success','تغییرات ذخیره شد.');
     }
 
@@ -86,7 +90,7 @@ class ManagementController extends Controller
     private function authorizeRecord(Request $request,string $resource,Model $record): void { if ($resource==='projects') $this->authorize('update',$record); if (in_array($resource,['contracts','items','subitems','tasks'],true) && ! $request->user()->hasRole('admin')) { $project=$resource==='contracts' ? $record->project : ($resource==='items' ? $record->project : ($resource==='subitems' ? $record->projectItem->project : $record->projectSubitem->projectItem->project)); $this->authorize('update',$project); } }
     private function enforceScope(Request $request,string $resource,array $data): void { if (in_array($resource,['contracts','items','subitems','tasks'],true) && ! $request->user()->hasRole('admin')) { $projectId=in_array($resource,['contracts','items'],true) ? $data['project_id'] : ($resource==='subitems' ? ProjectItem::findOrFail($data['project_item_id'])->project_id : ProjectSubitem::findOrFail($data['project_subitem_id'])->projectItem->project_id); abort_unless($this->visibleProjects($request,Project::query())->whereKey($projectId)->exists(),403); } }
     private function rules(string $resource,?Model $record=null): array { $uniqueId=$record?->id; return match($resource) {
-        'people'=>['type'=>['required',Rule::in(['individual','company'])],'full_name'=>['required','string','max:150'],'mobile'=>['required','string','max:20'],'national_id'=>['nullable','string','max:30',Rule::unique('people','national_id')->ignore($uniqueId)],'registration_no'=>['nullable','string','max:30',Rule::unique('people','registration_no')->ignore($uniqueId)],'address'=>['nullable','string'],'notes'=>['nullable','string'],'is_active'=>['boolean']],
+        'people'=>['type'=>['required',Rule::in(['individual','company'])],'full_name'=>['required','string','max:150'],'mobile'=>['required','string','max:20'],'national_id'=>['nullable','string','max:30',Rule::unique('people','national_id')->ignore($uniqueId)],'registration_no'=>['nullable','string','max:30',Rule::unique('people','registration_no')->ignore($uniqueId)],'business_roles'=>['nullable','array'],'business_roles.*'=>[Rule::in(['account_holder','employee','customer','department_manager','project_manager'])],'department_ids'=>['nullable','array'],'department_ids.*'=>['integer','exists:departments,id'],'address'=>['nullable','string'],'notes'=>['nullable','string'],'is_active'=>['boolean']],
         'departments'=>['name'=>['required','string','max:150',Rule::unique('departments','name')->ignore($uniqueId)],'code'=>['required','alpha_dash','max:50',Rule::unique('departments','code')->ignore($uniqueId)],'description'=>['nullable','string'],'manager_person_id'=>['nullable','exists:people,id'],'is_active'=>['boolean']],
         'accounts'=>['owner_person_id'=>['nullable','exists:people,id'],'name'=>['required','string','max:150'],'kind'=>['required',Rule::in(['bank_account','card','sheba','cashbox','personal'])],'bank_name'=>['nullable','string','max:100'],'branch_name'=>['nullable','string','max:100'],'account_number'=>['nullable','string','max:100'],'card_number'=>['nullable','string','max:30'],'iban'=>['nullable','string','max:40'],'opening_balance'=>['required','integer'],'opening_balance_date'=>['nullable','date'],'is_workshop_owned'=>['boolean'],'is_active'=>['boolean'],'notes'=>['nullable','string']],
         'projects'=>['code'=>['required','string','max:50',Rule::unique('projects','code')->ignore($uniqueId)],'title'=>['required','string','max:150'],'customer_person_id'=>['nullable','exists:people,id'],'department_ids'=>['nullable','array'],'department_ids.*'=>['integer','exists:departments,id'],'manager_ids'=>['nullable','array'],'manager_ids.*'=>['integer','exists:people,id'],'planned_start_date'=>['nullable','date'],'planned_end_date'=>['nullable','date','after_or_equal:planned_start_date'],'budget_amount'=>['required','integer','min:0'],'contract_total_amount'=>['required','integer','min:0'],'status'=>['required',Rule::in(['draft','pending_start','in_progress','paused','delivered','cancelled'])],'site_address'=>['nullable','string'],'site_phone'=>['nullable','string','max:20'],'description'=>['nullable','string'],'is_active'=>['boolean']],
@@ -99,14 +103,24 @@ class ManagementController extends Controller
 
     private function syncRelations(string $resource, Model $record, array $relations, Request $request): void
     {
+        if ($resource === 'people') {
+            $record->roles()->delete();
+            foreach ($relations['business_roles'] ?? [] as $role) $record->roles()->create(['role' => $role]);
+            $record->departments()->sync(collect($relations['department_ids'] ?? [])->mapWithKeys(fn ($id) => [$id => ['joined_at' => now()->toDateString(), 'is_active' => true]])->all());
+        }
         if ($resource === 'projects') {
+            $managerIds = array_values(array_unique($relations['manager_ids'] ?? []));
+            if (count($managerIds) !== Person::whereIn('id', $managerIds)->whereHas('roles', fn ($query) => $query->where('role', 'project_manager'))->count()) {
+                throw ValidationException::withMessages(['manager_ids' => 'همه مدیران انتخاب‌شده باید نقش کاری «مدیر پروژه» داشته باشند.']);
+            }
             $record->departments()->sync($relations['department_ids'] ?? []);
-            $record->managers()->sync(collect($relations['manager_ids'] ?? [])->mapWithKeys(fn ($id) => [$id => ['is_primary' => false]])->all());
+            $record->managers()->sync(collect($managerIds)->mapWithKeys(fn ($id, $index) => [$id => ['is_primary' => $index === 0]])->all());
+            if ($record->wasRecentlyCreated) foreach (['progress', 'project_status'] as $reportKey) $record->reportPermissions()->firstOrCreate(['report_key' => $reportKey], ['is_enabled' => true]);
         }
         if ($resource === 'tasks') {
-            $requested = $relations['assignee_ids'] ?? [];
-            $assignees = Person::whereIn('id', $requested)->whereDoesntHave('roles', fn ($query) => $query->where('role', 'customer'))->pluck('id');
-            abort_unless($assignees->count() === count($requested), 422, 'مشتری نمی‌تواند مسئول تسک باشد.');
+            $requested = array_values(array_unique($relations['assignee_ids'] ?? []));
+            $assignees = Person::whereIn('id', $requested)->whereHas('roles', fn ($query) => $query->where('role', 'employee'))->pluck('id');
+            if ($assignees->count() !== count($requested)) throw ValidationException::withMessages(['assignee_ids' => 'مسئول تسک باید نقش کاری «کارمند» داشته باشد و مشتری نباشد.']);
             $record->assignees()->sync($assignees->mapWithKeys(fn ($id) => [$id => ['assigned_by' => $request->user()->id, 'assigned_at' => now()]])->all());
         }
     }

@@ -72,6 +72,8 @@ document.addEventListener('DOMContentLoaded', () => {
             const match = digits.match(/^(1[34]\d\d)\/(\d{1,2})\/(\d{1,2})$/);
             if (!match || +match[2] < 1 || +match[2] > 12 || +match[3] < 1 || +match[3] > 31) { hidden.value = ''; input.setCustomValidity('تاریخ را به شکل ۱۴۰۵/۰۵/۲۲ وارد کنید.'); return; }
             const [gy, gm, gd] = jalaliToGregorian(+match[1], +match[2], +match[3]);
+            const roundTrip = gregorianToJalali(gy, gm, gd);
+            if (roundTrip[0] !== +match[1] || roundTrip[1] !== +match[2] || roundTrip[2] !== +match[3]) { hidden.value = ''; input.setCustomValidity('این تاریخ در تقویم شمسی معتبر نیست.'); return; }
             hidden.value = `${gy}-${pad(gm)}-${pad(gd)}`; input.value = `${match[1]}/${pad(match[2])}/${pad(match[3])}`; input.setCustomValidity('');
         });
     });
